@@ -1,6 +1,12 @@
 # Folder Structure Viewer
 
-## Описание
+![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Montserrat&weight=500&size=25&duration=2800&pause=800&color=DC143C&vCenter=true&width=500&height=30&lines=S+U+T+I+V+I+S+M+Project.;.)
+
+[![Telegram](https://img.shields.io/badge/SawGoD-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/SawGoD)
+
+---
+
+## О проекте
 
 Этот проект представляет собой утилиту на Python, которая позволяет пользователю просматривать структуру папок и файлов в указанной директории. Утилита поддерживает исключения для папок, файлов и расширений, что позволяет игнорировать нежелательные элементы при выводе структуры.
 
