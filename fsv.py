@@ -1,7 +1,7 @@
 import os
 
 
-def load_exclusions(file_path="exceptions.txt"):
+def load_exclusions(file_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "exceptions.txt")):
     """Загружает папки, расширения и файлы для исключения из файла."""
     exclude_dirs = []
     exclude_extensions = []
@@ -48,7 +48,11 @@ def get_folder_structure(path, depth=0, exclude_dirs=None, exclude_extensions=No
                     # Пропускаем папки, если они в списке исключений
                     if entry.name in exclude_dirs:
                         continue
-                    structure[entry.name] = get_folder_structure(entry.path, depth + 1, exclude_dirs, exclude_extensions, exclude_files)
+                    sub_structure = get_folder_structure(entry.path, depth + 1, exclude_dirs, exclude_extensions, exclude_files)
+                    if sub_structure:  # Добавляем папку только если она не пустая
+                        structure[entry.name] = sub_structure
+                    else:
+                        structure[entry.name] = {"<Пустая папка>": None}
                 else:
                     # Пропускаем файлы, если их расширение или имя в списке исключений
                     if any(entry.name.endswith(ext) for ext in exclude_extensions) or entry.name in exclude_files:
@@ -86,11 +90,27 @@ def format_structure(structure, indent=0):
 
 
 # Пример использования
-path = input("\nВведите путь к папке: ")
-folder_name = path.split(os.sep)[-1] if path != "." else "."
+while True:
+    path = input("\nВведите путь к папке: ")
+    if path:
+        # Проверяем корректность пути
+        try:
+            if not os.path.exists(path):
+                print("Указанный путь не существует. Пожалуйста, проверьте правильность пути.")
+                continue
+            if not os.path.isdir(path):
+                print("Указанный путь не является директорией. Пожалуйста, укажите путь к папке.")
+                continue
+            if any(char in path for char in ['<', '>', '|', '*', '?', '"']):
+                print("Путь содержит недопустимые символы (<, >, |, *, ?, \"). Пожалуйста, исправьте путь.")
+                continue
+            break
+        except Exception as e:
+            print(f"Ошибка при проверке пути: {str(e)}")
+            continue
+    print("Путь не может быть пустым. Пожалуйста, повторите.")
 
-if path == "":
-    path = "."
+folder_name = path.split(os.sep)[-1] if path != "." else "."
 
 # Загружаем исключаемые папки, расширения и файлы из файла
 exclude_dirs, exclude_extensions, exclude_files = load_exclusions()
@@ -114,6 +134,9 @@ print("  - игнорируемые расширения:\n    ", exclude_extens
 print("  - игнорируемые файлы:\n    ", exclude_files)
 
 folder_structure = get_folder_structure(path, exclude_dirs=exclude_dirs, exclude_extensions=exclude_extensions, exclude_files=exclude_files)
-print("\nСтруктура папки:\n")
-print(folder_name)
-print(format_structure(folder_structure))
+if not folder_structure:
+    print(f"\nПапка 🗃️ '{folder_name}' пуста или всё содержимое исключено!")
+else:
+    print("\nСтруктура папки:\n")
+    print(f"🗃️ {folder_name}")
+    print(format_structure(folder_structure))
