@@ -1,5 +1,13 @@
 import os
+import signal
+import sys
 from typing import Dict, List, Optional, Tuple, Union
+
+
+def signal_handler(sig, frame):
+    """Обработчик сигнала для корректного завершения программы"""
+    print("\n\nПрограмма завершена пользователем")
+    sys.exit(0)
 
 
 def load_exclusions(file_path: str = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -130,6 +138,11 @@ def get_user_exclusions() -> Tuple[List[str], List[str], List[str]]:
 
 def main():
     """Основная логика программы"""
+    # Регистрируем обработчик сигнала CTRL+C
+    signal.signal(signal.SIGINT, signal_handler)
+
+    print("Для выхода из программы нажмите CTRL+C")
+
     while True:
         path = input("\nВведите путь к папке: ")
         if validate_path(path):
