@@ -1,3 +1,4 @@
+import argparse
 import os
 import signal
 import sys
@@ -11,7 +12,7 @@ def signal_handler(sig, frame):
 
 
 def load_exclusions(file_path: str = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                  "exceptions.txt")) -> Tuple[List[str], List[str], List[str]]:
+                                                  "exceptions.txt"), quiet: bool = False) -> Tuple[List[str], List[str], List[str]]:
     """Загружает папки, расширения и файлы для исключения из файла."""
     exclude_dirs, exclude_extensions, exclude_files = [], [], []
 
@@ -32,12 +33,14 @@ def load_exclusions(file_path: str = os.path.join(os.path.dirname(os.path.abspat
                     exclude_dirs.append(entry)
 
     except FileNotFoundError:
-        print(f"Файл {file_path} не найден. Исключений не загружено.")
+        if not quiet:
+            print(f"Файл {file_path} не найден. Исключений не загружено.")
 
-    print("\n\nИсключения по умолчанию:")
-    print("  - игнорируемые папки:\n    ", exclude_dirs)
-    print("  - игнорируемые расширения:\n    ", exclude_extensions)
-    print("  - игнорируемые файлы:\n    ", exclude_files)
+    if not quiet:
+        print("\n\nИсключения по умолчанию:")
+        print("  - игнорируемые папки:\n    ", exclude_dirs)
+        print("  - игнорируемые расширения:\n    ", exclude_extensions)
+        print("  - игнорируемые файлы:\n    ", exclude_files)
 
     return exclude_dirs, exclude_extensions, exclude_files
 
@@ -209,28 +212,101 @@ def format_size(size_bytes: int) -> str:
         return f"{size_bytes / (1024 * 1024 * 1024):.2f} ГБ"
 
 
+def parse_arguments():
+    """Парсит аргументы командной строки"""
+    description = '''Folder Structure Viewer - визуализация структуры папок
+
+Примеры использования:
+  fsv.py                                          # Интерактивный режим
+  fsv.py /path/to/folder                          # Анализ конкретной папки
+  fsv.py . -c                                     # Анализ текущей папки только с конфигурацией
+  fsv.py -c                                       # Анализ текущей папки только с конфигурацией
+  fsv.py /path -d node_modules .git               # Исключить папки
+  fsv.py /path -e .pyc .log                       # Исключить расширения файлов
+  fsv.py /path -f config.ini settings.json       # Исключить конкретные файлы
+  fsv.py /path --no-config -d temp                # Без конфигурации, исключить папку temp
+  fsv.py -i                                       # Принудительный интерактивный режим'''
+
+    parser = argparse.ArgumentParser(
+        description=description,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument('path', nargs='?', default=None, help='Путь к папке для анализа')
+    parser.add_argument('--exclude-dirs', '-d', nargs='*', default=[],
+                        help='Папки для исключения (например: --exclude-dirs node_modules .git)')
+    parser.add_argument('--exclude-extensions', '-e', nargs='*', default=[],
+                        help='Расширения файлов для исключения (например: --exclude-extensions .pyc .log)')
+    parser.add_argument('--exclude-files', '-f', nargs='*', default=[],
+                        help='Файлы для исключения (например: --exclude-files config.ini settings.json)')
+    parser.add_argument('--no-config', action='store_true',
+                        help='Не загружать исключения из файла exceptions.txt')
+    parser.add_argument('--config-only', '-c', action='store_true',
+                        help='Загружать только исключения из файла, без пользовательского ввода')
+    parser.add_argument('--interactive', '-i', action='store_true',
+                        help='Запустить в интерактивном режиме')
+
+    return parser.parse_args()
+
+
 def main():
     """Основная логика программы"""
     # Регистрируем обработчик сигнала CTRL+C
     signal.signal(signal.SIGINT, signal_handler)
 
-    print("Для выхода из программы нажмите CTRL+C")
+    args = parse_arguments()
 
-    while True:
-        path = input("\nВведите путь к папке: ")
-        if validate_path(path):
-            break
+    # Интерактивный режим или отсутствие пути
+    if args.interactive or (args.path is None and not args.config_only):
+        print("Для выхода из программы нажмите CTRL+C")
+
+        while True:
+            path = input("\nВведите путь к папке: ")
+            if validate_path(path):
+                break
+
+        # Загружаем исключения из файла
+        if not args.no_config:
+            exclude_dirs, exclude_extensions, exclude_files = load_exclusions()
+        else:
+            exclude_dirs, exclude_extensions, exclude_files = [], [], []
+
+        # Добавляем пользовательские исключения интерактивно
+        user_dirs, user_extensions, user_files = get_user_exclusions()
+        exclude_dirs.extend(user_dirs)
+        exclude_extensions.extend(user_extensions)
+        exclude_files.extend(user_files)
+    elif args.config_only:
+        # Режим только с конфигурацией - загрузить конфиг и использовать текущую папку
+        path = args.path or "."
+        if not validate_path(path):
+            sys.exit(1)
+
+        # Загружаем исключения из файла в тихом режиме
+        exclude_dirs, exclude_extensions, exclude_files = load_exclusions(quiet=True)
+
+        # Добавляем исключения из аргументов командной строки
+        exclude_dirs.extend(args.exclude_dirs)
+        exclude_extensions.extend(args.exclude_extensions)
+        exclude_files.extend(args.exclude_files)
+    else:
+        # Неинтерактивный режим
+        path = args.path
+        if not validate_path(path):
+            sys.exit(1)
+
+        # Загружаем исключения из файла, если не отключено
+        if not args.no_config:
+            exclude_dirs, exclude_extensions, exclude_files = load_exclusions()
+        else:
+            exclude_dirs, exclude_extensions, exclude_files = [], [], []
+            print("Исключения из файла не загружены (--no-config)")
+
+        # Добавляем исключения из аргументов командной строки
+        exclude_dirs.extend(args.exclude_dirs)
+        exclude_extensions.extend(args.exclude_extensions)
+        exclude_files.extend(args.exclude_files)
 
     folder_name = path.split(os.sep)[-1] if path != "." else "."
-
-    # Загружаем исключения
-    exclude_dirs, exclude_extensions, exclude_files = load_exclusions()
-
-    # Добавляем пользовательские исключения
-    user_dirs, user_extensions, user_files = get_user_exclusions()
-    exclude_dirs.extend(user_dirs)
-    exclude_extensions.extend(user_extensions)
-    exclude_files.extend(user_files)
 
     # Выводим итоговые исключения
     print("\n\nИтоговые исключения:")
