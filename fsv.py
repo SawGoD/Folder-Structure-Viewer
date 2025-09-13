@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 def signal_handler(sig, frame):
     """Обработчик сигнала для корректного завершения программы"""
+    print("\n\nПрограмма завершена пользователем")
     sys.exit(0)
 
 
