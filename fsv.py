@@ -7,7 +7,6 @@ from typing import Dict, List, Optional, Tuple, Union
 
 def signal_handler(sig, frame):
     """Обработчик сигнала для корректного завершения программы"""
-    print("\n\nПрограмма завершена пользователем")
     sys.exit(0)
 
 
@@ -160,29 +159,34 @@ def format_structure(structure: Dict[str, Union[None, Dict]], indent: int = 0, p
     return formatted
 
 
-def validate_path(path: str) -> bool:
+def validate_path(path: str, quiet: bool = False) -> bool:
     """Проверяет корректность введенного пути"""
     if not path:
-        print("Путь не может быть пустым. Пожалуйста, повторите.")
+        if not quiet:
+            print("Путь не может быть пустым. Пожалуйста, повторите.")
         return False
 
     try:
         if not os.path.exists(path):
-            print("Указанный путь не существует. Пожалуйста, проверьте правильность пути.")
+            if not quiet:
+                print("Указанный путь не существует. Пожалуйста, проверьте правильность пути.")
             return False
 
         if not os.path.isdir(path):
-            print("Указанный путь не является директорией. Пожалуйста, укажите путь к папке.")
+            if not quiet:
+                print("Указанный путь не является директорией. Пожалуйста, укажите путь к папке.")
             return False
 
         if any(char in path for char in ['<', '>', '|', '*', '?', '"']):
-            print("Путь содержит недопустимые символы (<, >, |, *, ?, \"). Пожалуйста, исправьте путь.")
+            if not quiet:
+                print("Путь содержит недопустимые символы (<, >, |, *, ?, \"). Пожалуйста, исправьте путь.")
             return False
 
         return True
 
     except Exception as e:
-        print(f"Ошибка при проверке пути: {str(e)}")
+        if not quiet:
+            print(f"Ошибка при проверке пути: {str(e)}")
         return False
 
 
@@ -225,7 +229,8 @@ def parse_arguments():
   fsv.py /path -e .pyc .log                       # Исключить расширения файлов
   fsv.py /path -f config.ini settings.json       # Исключить конкретные файлы
   fsv.py /path --no-config -d temp                # Без конфигурации, исключить папку temp
-  fsv.py -i                                       # Принудительный интерактивный режим'''
+  fsv.py -i                                       # Принудительный интерактивный режим
+  fsv.py /path -q                                 # Тихий режим - только дерево файлов'''
 
     parser = argparse.ArgumentParser(
         description=description,
@@ -244,6 +249,8 @@ def parse_arguments():
                         help='Загружать только исключения из файла, без пользовательского ввода')
     parser.add_argument('--interactive', '-i', action='store_true',
                         help='Запустить в интерактивном режиме')
+    parser.add_argument('--quiet', '-q', action='store_true',
+                        help='Вывести только дерево файлов без дополнительной информации')
 
     return parser.parse_args()
 
@@ -266,7 +273,7 @@ def main():
 
         # Загружаем исключения из файла
         if not args.no_config:
-            exclude_dirs, exclude_extensions, exclude_files = load_exclusions()
+            exclude_dirs, exclude_extensions, exclude_files = load_exclusions(quiet=True)
         else:
             exclude_dirs, exclude_extensions, exclude_files = [], [], []
 
@@ -278,7 +285,7 @@ def main():
     elif args.config_only:
         # Режим только с конфигурацией - загрузить конфиг и использовать текущую папку
         path = args.path or "."
-        if not validate_path(path):
+        if not validate_path(path, quiet=args.quiet):
             sys.exit(1)
 
         # Загружаем исключения из файла в тихом режиме
@@ -291,15 +298,16 @@ def main():
     else:
         # Неинтерактивный режим
         path = args.path
-        if not validate_path(path):
+        if not validate_path(path, quiet=args.quiet):
             sys.exit(1)
 
         # Загружаем исключения из файла, если не отключено
         if not args.no_config:
-            exclude_dirs, exclude_extensions, exclude_files = load_exclusions()
+            exclude_dirs, exclude_extensions, exclude_files = load_exclusions(quiet=args.quiet)
         else:
             exclude_dirs, exclude_extensions, exclude_files = [], [], []
-            print("Исключения из файла не загружены (--no-config)")
+            if not args.quiet:
+                print("Исключения из файла не загружены (--no-config)")
 
         # Добавляем исключения из аргументов командной строки
         exclude_dirs.extend(args.exclude_dirs)
@@ -308,29 +316,37 @@ def main():
 
     folder_name = path.split(os.sep)[-1] if path != "." else "."
 
-    # Выводим итоговые исключения
-    print("\n\nИтоговые исключения:")
-    print("  - игнорируемые папки:\n    ", exclude_dirs)
-    print("  - игнорируемые расширения:\n    ", exclude_extensions)
-    print("  - игнорируемые файлы:\n    ", exclude_files)
+    # Выводим итоговые исключения только если не в тихом режиме
+    if not args.quiet:
+        print("\n\nИтоговые исключения:")
+        print("  - игнорируемые папки:\n    ", exclude_dirs)
+        print("  - игнорируемые расширения:\n    ", exclude_extensions)
+        print("  - игнорируемые файлы:\n    ", exclude_files)
 
     # Получаем и выводим структуру
     folder_structure, total_dirs, total_files, hidden_dirs, hidden_files, empty_dirs, total_size = get_folder_structure(
         path, exclude_dirs=exclude_dirs, exclude_extensions=exclude_extensions, exclude_files=exclude_files)
 
     if not folder_structure:
-        print(f"\nПапка 🗃️ '{folder_name}' пуста или всё содержимое исключено!")
+        if not args.quiet:
+            print(f"\nПапка 🗃️ '{folder_name}' пуста или всё содержимое исключено!")
     else:
-        print("\nСтруктура папки:\n")
-        print(f"🗃️ {folder_name}")
-        print(format_structure(folder_structure, path=path))
+        if args.quiet:
+            # В тихом режиме выводим только дерево файлов
+            print(f"🗃️ {folder_name}")
+            print(format_structure(folder_structure, path=path))
+        else:
+            # В обычном режиме выводим всю информацию
+            print("\nСтруктура папки:\n")
+            print(f"🗃️ {folder_name}")
+            print(format_structure(folder_structure, path=path))
 
-        # Выводим статистику
-        print("\nСтатистика:")
-        print(f"📊 Всего папок: {total_dirs} (скрыто: {hidden_dirs}/{total_dirs}, пусто: {empty_dirs}/{total_dirs})")
-        print(f"📊 Всего файлов: {total_files} (скрыто: {hidden_files}/{total_files})")
-        print(f"📊 Всего элементов: {total_dirs + total_files} (скрыто: {hidden_dirs + hidden_files}/{total_dirs + total_files})")
-        print(f"📊 Общий размер: {format_size(total_size)}")
+            # Выводим статистику
+            print("\nСтатистика:")
+            print(f"📊 Всего папок: {total_dirs} (скрыто: {hidden_dirs}/{total_dirs}, пусто: {empty_dirs}/{total_dirs})")
+            print(f"📊 Всего файлов: {total_files} (скрыто: {hidden_files}/{total_files})")
+            print(f"📊 Всего элементов: {total_dirs + total_files} (скрыто: {hidden_dirs + hidden_files}/{total_dirs + total_files})")
+            print(f"📊 Общий размер: {format_size(total_size)}")
 
 
 if __name__ == "__main__":
